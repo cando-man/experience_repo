@@ -6,8 +6,7 @@ on:
     branches:
       # 設計書リンクを共有したいPRのベースブランチを指定します。
       # 例: 'main', 'develop', 'release/*' など、運用に合わせて追加・変更してください。
-      - main
-      - develop
+      - release/*
 
 jobs:
   update-design-docs:
