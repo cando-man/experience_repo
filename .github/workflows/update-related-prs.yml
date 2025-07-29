@@ -285,7 +285,7 @@ jobs:
                 }
                 
                 // 設計書セクションのテンプレートを作成
-                const designDocSection = `\n\n## 関連設計書\n\n${designDocs.join('\n')}`;
+                const designDocSection = `\n\n## 設計書一覧\n\n${designDocs.join('\n')}`;
                 
                 let successCount = 0;
                 let errorCount = 0;
@@ -303,14 +303,34 @@ jobs:
                     
                     let newBody = pr.body || '';
                     
-                    // 既に設計書セクションがあるかチェック
-                    if (newBody.includes('## 関連設計書')) {
-                      console.log(`PR #${prNumber} already has design doc section, skipping`);
-                      continue;
+                    // 既に設計書一覧セクションがあるかチェック
+                    if (newBody.includes('## 設計書一覧')) {
+                      console.log(`PR #${prNumber} already has design doc section, adding to existing section`);
+                      
+                      // 既存の設計書一覧セクションに設計書を追加
+                      const designDocLines = designDocs.map(doc => doc.trim());
+                      const existingDesignDocs = [];
+                      
+                      // 既存の設計書を抽出
+                      const existingMatch = newBody.match(/##\s*設計書一覧\r?\n([\s\S]*?)(?=\r?\n##|\r?\n---|$)/);
+                      if (existingMatch) {
+                        const existingSection = existingMatch[1];
+                        const existingLinks = existingSection.match(/\*\s*\[.*?\]\(https:\/\/docs\.google\.com\/spreadsheets\/d\/.*?\)/g);
+                        if (existingLinks) {
+                          existingDesignDocs.push(...existingLinks.map(link => link.trim()));
+                        }
+                      }
+                      
+                      // 新しい設計書を追加（重複を避ける）
+                      const allDesignDocs = [...new Set([...existingDesignDocs, ...designDocLines])];
+                      
+                      // 既存のセクションを新しい内容で置き換え
+                      const newDesignDocSection = `## 設計書一覧\n\n${allDesignDocs.join('\n')}`;
+                      newBody = newBody.replace(/##\s*設計書一覧\r?\n[\s\S]*?)(?=\r?\n##|\r?\n---|$)/, newDesignDocSection);
+                    } else {
+                      // 設計書セクションを新規追加
+                      newBody += designDocSection;
                     }
-                    
-                    // 設計書セクションを追加
-                    newBody += designDocSection;
                     
                     // PRの説明を更新
                     await github.rest.pulls.update({
