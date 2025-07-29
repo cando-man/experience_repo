@@ -100,9 +100,9 @@ jobs:
               // 複数のパターンを試す
               let docSectionMatch = null;
               const patterns = [
-                /##\s*[^\n]*設計書一覧\n([\s\S]*?)(?=\n##|\n---|$)/,  // ## 任意の文字 + 設計書一覧
-                /#\s*[^\n]*設計書一覧\n([\s\S]*?)(?=\n#|\n---|$)/,    // # 任意の文字 + 設計書一覧
-                /設計書一覧\n([\s\S]*?)(?=\n##|\n#|\n---|$)/      // 設計書一覧（より緩い）
+                /##\s*[^\r\n]*設計書一覧\r?\n([\s\S]*?)(?=\r?\n##|\r?\n---|$)/,  // ## 任意の文字 + 設計書一覧
+                /#\s*[^\r\n]*設計書一覧\r?\n([\s\S]*?)(?=\r?\n#|\r?\n---|$)/,    // # 任意の文字 + 設計書一覧
+                /設計書一覧\r?\n([\s\S]*?)(?=\r?\n##|\r?\n#|\r?\n---|$)/      // 設計書一覧（より緩い）
               ];
               
               for (let i = 0; i < patterns.length; i++) {
@@ -162,19 +162,24 @@ jobs:
                 console.log('Trying alternative patterns...');
                 
                 // パターン1: より緩いマッチング
-                const altMatch1 = prBody.match(/#\s*設計書一覧[\s\S]*?(?=\n#|\n---|$)/);
+                const altMatch1 = prBody.match(/#\s*設計書一覧[\s\S]*?(?=\r?\n#|\r?\n---|$)/);
                 console.log('Alternative pattern 1 result:', altMatch1);
                 
-                // パターン2: 行単位での検索
-                const lines = prBody.split('\n');
-                console.log('All lines in PR body:');
-                lines.forEach((line, index) => {
-                  console.log(`${index}: "${line}"`);
-                });
-                
-                // パターン3: 設計書一覧を含む行を探す
-                const designDocLines = lines.filter(line => line.includes('設計書一覧'));
-                console.log('Lines containing "設計書一覧":', designDocLines);
+                if (altMatch1) {
+                  console.log('Using alternative pattern 1 result');
+                  docSectionMatch = altMatch1;
+                } else {
+                  // パターン2: 行単位での検索
+                  const lines = prBody.split('\n');
+                  console.log('All lines in PR body:');
+                  lines.forEach((line, index) => {
+                    console.log(`${index}: "${line}"`);
+                  });
+                  
+                  // パターン3: 設計書一覧を含む行を探す
+                  const designDocLines = lines.filter(line => line.includes('設計書一覧'));
+                  console.log('Lines containing "設計書一覧":', designDocLines);
+                }
               }
               
               let designDocs = [];
@@ -183,6 +188,14 @@ jobs:
                   const links = docSectionMatch[1].match(/\*\s*\[.*?\]\(https:\/\/docs\.google\.com\/spreadsheets\/d\/.*?\)/g);
                   if (links) {
                       designDocs = links.map(link => link.trim());
+                  }
+              } else if (docSectionMatch && docSectionMatch[0]) {
+                  // 代替パターンで見つかった場合（docSectionMatch[0]に全体の内容が入っている）
+                  console.log('Extracting links from alternative pattern result');
+                  const links = docSectionMatch[0].match(/\*\s*\[.*?\]\(https:\/\/docs\.google\.com\/spreadsheets\/d\/.*?\)/g);
+                  if (links) {
+                      designDocs = links.map(link => link.trim());
+                      console.log('Found links from alternative pattern:', designDocs);
                   }
               }
               
