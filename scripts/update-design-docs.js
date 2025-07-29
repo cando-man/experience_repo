@@ -1,5 +1,6 @@
-const core = require('@actions/core');
-const github = require('@actions/github');
+// GitHub Actionsのactions/github-scriptでは、coreとgithubはグローバルに利用可能
+// const core = require('@actions/core');
+// const github = require('@actions/github');
 
 async function getMergedPRDetails() {
   try {
