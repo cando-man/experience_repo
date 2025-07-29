@@ -26,7 +26,18 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const { getMergedPRDetails } = require('./scripts/update-design-docs.js');
+            const fs = require('fs');
+            const path = require('path');
+            
+            // スクリプトファイルを読み込み
+            const scriptPath = path.join(process.cwd(), 'scripts', 'update-design-docs.js');
+            const scriptContent = fs.readFileSync(scriptPath, 'utf8');
+            
+            // グローバルオブジェクトを明示的に渡す
+            const scriptFunction = new Function('core', 'github', 'context', scriptContent);
+            
+            // スクリプトを実行
+            const { getMergedPRDetails } = scriptFunction(core, github, context);
             await getMergedPRDetails();
 
       - name: Find All Open PRs to the Same Base Branch
@@ -34,7 +45,18 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const { findOpenPRs } = require('./scripts/update-design-docs.js');
+            const fs = require('fs');
+            const path = require('path');
+            
+            // スクリプトファイルを読み込み
+            const scriptPath = path.join(process.cwd(), 'scripts', 'update-design-docs.js');
+            const scriptContent = fs.readFileSync(scriptPath, 'utf8');
+            
+            // グローバルオブジェクトを明示的に渡す
+            const scriptFunction = new Function('core', 'github', 'context', scriptContent);
+            
+            // スクリプトを実行
+            const { findOpenPRs } = scriptFunction(core, github, context);
             await findOpenPRs();
         env:
           base_branch: ${{ steps.get_pr_details.outputs.base_branch }}
@@ -46,7 +68,18 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const { updatePRDescriptions } = require('./scripts/update-design-docs.js');
+            const fs = require('fs');
+            const path = require('path');
+            
+            // スクリプトファイルを読み込み
+            const scriptPath = path.join(process.cwd(), 'scripts', 'update-design-docs.js');
+            const scriptContent = fs.readFileSync(scriptPath, 'utf8');
+            
+            // グローバルオブジェクトを明示的に渡す
+            const scriptFunction = new Function('core', 'github', 'context', scriptContent);
+            
+            // スクリプトを実行
+            const { updatePRDescriptions } = scriptFunction(core, github, context);
             await updatePRDescriptions();
         env:
           target_pr_numbers: ${{ steps.find_all_open_prs.outputs.target_pr_numbers }}
