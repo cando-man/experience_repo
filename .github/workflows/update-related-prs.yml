@@ -92,8 +92,53 @@ jobs:
               }
               
               // 設計書一覧セクションを正規表現で抽出
-              // `# 設計書一覧` の後から、次の `#` 見出しまたはPRの終わりまでを対象とします。
-              const docSectionMatch = prBody.match(/#\s*設計書一覧\n([\s\S]*?)(?=\n#|\n---|$)/);
+              // `## 任意の文字 + 設計書一覧` または `# 任意の文字 + 設計書一覧` の後から、次の見出しまたはPRの終わりまでを対象とします。
+              // 絵文字や特殊文字は `[^\n]*` で無視します。
+              console.log('=== DESIGN DOC EXTRACTION DEBUG ===');
+              console.log('Looking for design doc section...');
+              
+              // 複数のパターンを試す
+              let docSectionMatch = null;
+              const patterns = [
+                /##\s*[^\n]*設計書一覧\n([\s\S]*?)(?=\n##|\n---|$)/,  // ## 任意の文字 + 設計書一覧
+                /#\s*[^\n]*設計書一覧\n([\s\S]*?)(?=\n#|\n---|$)/,    // # 任意の文字 + 設計書一覧
+                /設計書一覧\n([\s\S]*?)(?=\n##|\n#|\n---|$)/      // 設計書一覧（より緩い）
+              ];
+              
+              for (let i = 0; i < patterns.length; i++) {
+                const pattern = patterns[i];
+                console.log(`Trying pattern ${i + 1}:`, pattern);
+                docSectionMatch = prBody.match(pattern);
+                if (docSectionMatch) {
+                  console.log(`Pattern ${i + 1} matched!`);
+                  break;
+                }
+              }
+              
+              console.log('docSectionMatch:', docSectionMatch);
+              
+              if (docSectionMatch) {
+                console.log('Found design doc section:', docSectionMatch[1]);
+              } else {
+                console.log('No design doc section found');
+                // 代替パターンを試す
+                console.log('Trying alternative patterns...');
+                
+                // パターン1: より緩いマッチング
+                const altMatch1 = prBody.match(/#\s*設計書一覧[\s\S]*?(?=\n#|\n---|$)/);
+                console.log('Alternative pattern 1 result:', altMatch1);
+                
+                // パターン2: 行単位での検索
+                const lines = prBody.split('\n');
+                console.log('All lines in PR body:');
+                lines.forEach((line, index) => {
+                  console.log(`${index}: "${line}"`);
+                });
+                
+                // パターン3: 設計書一覧を含む行を探す
+                const designDocLines = lines.filter(line => line.includes('設計書一覧'));
+                console.log('Lines containing "設計書一覧":', designDocLines);
+              }
               
               let designDocs = [];
               if (docSectionMatch && docSectionMatch[1]) {
@@ -124,6 +169,10 @@ jobs:
             const baseBranch = process.env.base_branch;
             const mergedPrNumber = parseInt(process.env.merged_pr_number);
 
+            console.log('=== FINDING OPEN PRS DEBUG ===');
+            console.log('Base branch:', baseBranch);
+            console.log('Merged PR number:', mergedPrNumber);
+
             if (!baseBranch) {
               console.log('Base branch not found. Skipping finding open PRs.');
               core.setOutput('target_pr_numbers', JSON.stringify([]));
@@ -131,6 +180,7 @@ jobs:
             }
 
             // マージされたPRと同じベースブランチをターゲットとする、オープンなすべてのPRを取得
+            console.log('Fetching open PRs for base branch:', baseBranch);
             const { data: pulls } = await github.rest.pulls.list({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -139,10 +189,21 @@ jobs:
               per_page: 100 // 一度に取得するPRの最大数（必要に応じて調整）
             });
             
-            // マージされたPR自身は更新対象から除外
-            const targetPrNumbers = pulls
-              .filter(pr => pr.number !== mergedPrNumber)
-              .map(pr => pr.number);
+            console.log('Total open PRs found:', pulls.length);
+            console.log('All open PRs:');
+            pulls.forEach(pr => {
+              console.log(`- PR #${pr.number}: ${pr.title} (base: ${pr.base.ref}, head: ${pr.head.ref})`);
+            });
+            
+            // マージされたPR自身も含めて、すべてのオープンなPRを更新対象とする
+            const targetPrNumbers = pulls.map(pr => pr.number);
+            
+            console.log('PRs to update (including merged PR):');
+            targetPrNumbers.forEach(prNumber => {
+              const pr = pulls.find(p => p.number === prNumber);
+              const isMerged = prNumber === mergedPrNumber;
+              console.log(`- PR #${prNumber}: ${pr.title} ${isMerged ? '(MERGED)' : ''}`);
+            });
             
             console.log('Found Open PR Numbers to update:', targetPrNumbers);
             core.setOutput('target_pr_numbers', JSON.stringify(targetPrNumbers));
