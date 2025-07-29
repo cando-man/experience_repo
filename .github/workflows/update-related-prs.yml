@@ -326,7 +326,7 @@ jobs:
                       
                       // 既存のセクションを新しい内容で置き換え
                       const newDesignDocSection = `## 設計書一覧\n\n${allDesignDocs.join('\n')}`;
-                      newBody = newBody.replace(/##\s*設計書一覧\r?\n[\s\S]*?)(?=\r?\n##|\r?\n---|$)/, newDesignDocSection);
+                      newBody = newBody.replace(/##\s*設計書一覧\r?\n[\s\S]*?(?=\r?\n##|\r?\n---|$)/, newDesignDocSection);
                     } else {
                       // 設計書セクションを新規追加
                       newBody += designDocSection;
