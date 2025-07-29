@@ -14,8 +14,8 @@ on:
 
 jobs:
   update-design-docs:
-    # PRがマージされた場合のみ実行
-    if: github.event.pull_request.merged == true
+    # 一時的に条件を緩和してデバッグ
+    # if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -27,23 +27,45 @@ jobs:
         with:
           script: |
             try {
-              console.log('Event name:', github.event_name || 'undefined');
-              console.log('Event action:', github.event.action || 'undefined');
-              console.log('Full event object:', JSON.stringify(github.event, null, 2));
+              console.log('=== DEBUG INFORMATION ===');
+              console.log('github object exists:', typeof github !== 'undefined');
+              console.log('github.event exists:', typeof github.event !== 'undefined');
               
-              // pull_requestオブジェクトの存在確認
-              if (github.event.pull_request) {
-                console.log('Pull request object exists');
-                console.log('PR number:', github.event.pull_request.number);
-                console.log('PR merged:', github.event.pull_request.merged);
+              if (typeof github !== 'undefined') {
+                console.log('github.event_name:', github.event_name || 'undefined');
+                console.log('github.event.action:', github.event.action || 'undefined');
+                
+                if (typeof github.event !== 'undefined') {
+                  console.log('github.event keys:', Object.keys(github.event));
+                  console.log('Full event object:', JSON.stringify(github.event, null, 2));
+                  
+                  // pull_requestオブジェクトの存在確認
+                  if (github.event.pull_request) {
+                    console.log('Pull request object exists');
+                    console.log('PR number:', github.event.pull_request.number);
+                    console.log('PR merged:', github.event.pull_request.merged);
+                  } else {
+                    console.log('Pull request object is undefined');
+                  }
+                } else {
+                  console.log('github.event is undefined');
+                }
               } else {
-                console.log('Pull request object is undefined');
-                console.log('Available keys in event:', Object.keys(github.event));
+                console.log('github object is undefined');
               }
+              
+              // contextオブジェクトの確認
+              console.log('context object exists:', typeof context !== 'undefined');
+              if (typeof context !== 'undefined') {
+                console.log('context.payload exists:', typeof context.payload !== 'undefined');
+                if (typeof context.payload !== 'undefined') {
+                  console.log('context.payload keys:', Object.keys(context.payload));
+                }
+              }
+              
             } catch (error) {
               console.error('Error in debug step:', error);
-              console.log('github object:', typeof github);
-              console.log('github.event:', typeof github.event);
+              console.error('Error stack:', error.stack);
             }
 
       - name: Get Merged PR Details
@@ -51,77 +73,93 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            // 複数の方法でPRオブジェクトを取得
-            let pr = null;
-            
-            // 方法1: github.event.pull_request
-            if (github.event.pull_request) {
-              pr = github.event.pull_request;
-              console.log('Using github.event.pull_request');
-            }
-            // 方法2: context.payload.pull_request
-            else if (context.payload.pull_request) {
-              pr = context.payload.pull_request;
-              console.log('Using context.payload.pull_request');
-            }
-            // 方法3: APIを使用してPRを取得
-            else {
-              console.log('PR object not found in event, trying to get from API');
-              try {
-                const prNumber = context.issue.number;
-                const { data: prData } = await github.rest.pulls.get({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  pull_number: prNumber,
-                });
-                pr = prData;
-                console.log('Retrieved PR from API');
-              } catch (error) {
-                console.error('Failed to get PR from API:', error);
-                core.setFailed('Could not retrieve pull request information');
+            try {
+              console.log('=== GETTING PR DETAILS ===');
+              
+              // githubオブジェクトの存在確認
+              if (typeof github === 'undefined') {
+                console.error('github object is undefined');
+                core.setFailed('github object is not available');
                 return;
               }
-            }
-            
-            if (!pr) {
-              console.error('Pull request object not found');
-              core.setFailed('Pull request object is undefined');
-              return;
-            }
-            
-            const prBody = pr.body || ''; // マージされたPRの説明文を取得
-            const baseBranch = pr.base.ref; // マージされたPRのベースブランチを取得
-            
-            console.log('PR Number:', pr.number);
-            console.log('PR Body:', prBody);
-            console.log('Base Branch:', baseBranch);
-            
-            // 設計書一覧セクションを正規表現で抽出
-            // `# 設計書一覧` の後から、次の `#` 見出しまたはPRの終わりまでを対象とします。
-            const docSectionMatch = prBody.match(/#\s*設計書一覧\n([\s\S]*?)(?=\n#|\n---|$)/);
-            
-            let designDocs = [];
-            if (docSectionMatch && docSectionMatch[1]) {
-                // Googleスプレッドシートのリンク（`* [タイトル](https://docs.google.com/spreadsheets/d/...)` 形式）を抽出
-                const links = docSectionMatch[1].match(/\*\s*\[.*?\]\(https:\/\/docs\.google\.com\/spreadsheets\/d\/.*?\)/g);
-                if (links) {
-                    designDocs = links.map(link => link.trim());
+              
+              // 複数の方法でPRオブジェクトを取得
+              let pr = null;
+              
+              // 方法1: github.event.pull_request
+              if (github.event && github.event.pull_request) {
+                pr = github.event.pull_request;
+                console.log('Using github.event.pull_request');
+              }
+              // 方法2: context.payload.pull_request
+              else if (context && context.payload && context.payload.pull_request) {
+                pr = context.payload.pull_request;
+                console.log('Using context.payload.pull_request');
+              }
+              // 方法3: APIを使用してPRを取得
+              else {
+                console.log('PR object not found in event, trying to get from API');
+                try {
+                  const prNumber = context.issue.number;
+                  const { data: prData } = await github.rest.pulls.get({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    pull_number: prNumber,
+                  });
+                  pr = prData;
+                  console.log('Retrieved PR from API');
+                } catch (error) {
+                  console.error('Failed to get PR from API:', error);
+                  core.setFailed('Could not retrieve pull request information');
+                  return;
                 }
+              }
+              
+              if (!pr) {
+                console.error('Pull request object not found');
+                core.setFailed('Pull request object is undefined');
+                return;
+              }
+              
+              const prBody = pr.body || ''; // マージされたPRの説明文を取得
+              const baseBranch = pr.base.ref; // マージされたPRのベースブランチを取得
+              
+              console.log('PR Number:', pr.number);
+              console.log('PR Body:', prBody);
+              console.log('Base Branch:', baseBranch);
+              
+              // 設計書一覧セクションを正規表現で抽出
+              // `# 設計書一覧` の後から、次の `#` 見出しまたはPRの終わりまでを対象とします。
+              const docSectionMatch = prBody.match(/#\s*設計書一覧\n([\s\S]*?)(?=\n#|\n---|$)/);
+              
+              let designDocs = [];
+              if (docSectionMatch && docSectionMatch[1]) {
+                  // Googleスプレッドシートのリンク（`* [タイトル](https://docs.google.com/spreadsheets/d/...)` 形式）を抽出
+                  const links = docSectionMatch[1].match(/\*\s*\[.*?\]\(https:\/\/docs\.google\.com\/spreadsheets\/d\/.*?\)/g);
+                  if (links) {
+                      designDocs = links.map(link => link.trim());
+                  }
+              }
+              
+              console.log('Extracted Design Docs:', designDocs);
+              console.log('Base Branch of Merged PR:', baseBranch);
+              core.setOutput('design_docs', JSON.stringify(designDocs));
+              core.setOutput('base_branch', baseBranch);
+              core.setOutput('merged_pr_number', pr.number); // マージされたPR自身の番号
+              
+            } catch (error) {
+              console.error('Error in Get Merged PR Details:', error);
+              console.error('Error stack:', error.stack);
+              core.setFailed('Failed to get PR details: ' + error.message);
             }
-            
-            console.log('Extracted Design Docs:', designDocs);
-            console.log('Base Branch of Merged PR:', baseBranch);
-            core.setOutput('design_docs', JSON.stringify(designDocs));
-            core.setOutput('base_branch', baseBranch);
-            core.setOutput('merged_pr_number', pr.number); // マージされたPR自身の番号
 
       - name: Find All Open PRs to the Same Base Branch
         id: find_all_open_prs
         uses: actions/github-script@v7
         with:
           script: |
-            const baseBranch = core.getInput('base_branch');
-            const mergedPrNumber = parseInt(core.getInput('merged_pr_number'));
+            const baseBranch = process.env.base_branch;
+            const mergedPrNumber = parseInt(process.env.merged_pr_number);
 
             if (!baseBranch) {
               console.log('Base branch not found. Skipping finding open PRs.');
@@ -156,8 +194,8 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const targetPrNumbers = JSON.parse(core.getInput('target_pr_numbers'));
-            const mergedDesignDocs = JSON.parse(core.getInput('design_docs'));
+            const targetPrNumbers = JSON.parse(process.env.target_pr_numbers);
+            const mergedDesignDocs = JSON.parse(process.env.design_docs);
             
             if (mergedDesignDocs.length === 0) {
               console.log('No design docs found in the merged PR. Skipping update for all target PRs.');
