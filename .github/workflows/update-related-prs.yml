@@ -7,7 +7,10 @@ on:
       # 設計書リンクを共有したいPRのベースブランチを指定します。
       # 例: 'main', 'develop', 'release/*' など、運用に合わせて追加・変更してください。
       - main
+      - develop
       - develop/*
+      - release/*
+      - hotfix/*
 
 jobs:
   update-design-docs:
@@ -23,18 +26,24 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            console.log('Event name:', github.event_name);
-            console.log('Event action:', github.event.action);
-            console.log('Full event object:', JSON.stringify(github.event, null, 2));
-            
-            // pull_requestオブジェクトの存在確認
-            if (github.event.pull_request) {
-              console.log('Pull request object exists');
-              console.log('PR number:', github.event.pull_request.number);
-              console.log('PR merged:', github.event.pull_request.merged);
-            } else {
-              console.log('Pull request object is undefined');
-              console.log('Available keys in event:', Object.keys(github.event));
+            try {
+              console.log('Event name:', github.event_name || 'undefined');
+              console.log('Event action:', github.event.action || 'undefined');
+              console.log('Full event object:', JSON.stringify(github.event, null, 2));
+              
+              // pull_requestオブジェクトの存在確認
+              if (github.event.pull_request) {
+                console.log('Pull request object exists');
+                console.log('PR number:', github.event.pull_request.number);
+                console.log('PR merged:', github.event.pull_request.merged);
+              } else {
+                console.log('Pull request object is undefined');
+                console.log('Available keys in event:', Object.keys(github.event));
+              }
+            } catch (error) {
+              console.error('Error in debug step:', error);
+              console.log('github object:', typeof github);
+              console.log('github.event:', typeof github.event);
             }
 
       - name: Get Merged PR Details
