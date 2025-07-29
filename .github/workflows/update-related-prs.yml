@@ -119,6 +119,43 @@ jobs:
               
               if (docSectionMatch) {
                 console.log('Found design doc section:', docSectionMatch[1]);
+                
+                // 設計書セクションの内容を詳しく確認
+                console.log('=== DESIGN DOC SECTION DEBUG ===');
+                console.log('Section content:');
+                console.log('"' + docSectionMatch[1] + '"');
+                console.log('Section content (split by lines):');
+                const sectionLines = docSectionMatch[1].split('\n');
+                sectionLines.forEach((line, index) => {
+                  console.log(`${index}: "${line}"`);
+                });
+                
+                // リンク抽出のデバッグ
+                console.log('=== LINK EXTRACTION DEBUG ===');
+                const linkPattern = /\*\s*\[.*?\]\(https:\/\/docs\.google\.com\/spreadsheets\/d\/.*?\)/g;
+                console.log('Looking for links with pattern:', linkPattern);
+                
+                const links = docSectionMatch[1].match(linkPattern);
+                console.log('Found links:', links);
+                
+                if (links) {
+                  designDocs = links.map(link => link.trim());
+                  console.log('Processed design docs:', designDocs);
+                } else {
+                  console.log('No links found in section');
+                  
+                  // 代替パターンを試す
+                  console.log('Trying alternative link patterns...');
+                  
+                  // パターン1: より緩いマッチング
+                  const altPattern1 = /\*.*?https:\/\/docs\.google\.com\/spreadsheets\/d\/.*?\)/g;
+                  const altLinks1 = docSectionMatch[1].match(altPattern1);
+                  console.log('Alternative pattern 1 result:', altLinks1);
+                  
+                  // パターン2: 行単位でGoogleスプレッドシートのリンクを探す
+                  const googleSheetLines = sectionLines.filter(line => line.includes('docs.google.com/spreadsheets'));
+                  console.log('Lines containing Google Sheets links:', googleSheetLines);
+                }
               } else {
                 console.log('No design doc section found');
                 // 代替パターンを試す
@@ -315,4 +352,9 @@ jobs:
                 });
                 console.log(`Updated PR #${prNumber} with new design docs.`);
               } catch (error) {
-                console.error(`
+                console.error(`Failed to update PR #${prNumber}: ${error.message}`);
+              }
+            }
+        env:
+          target_pr_numbers: ${{ steps.find_all_open_prs.outputs.target_pr_numbers }}
+          design_docs: ${{ steps.get_pr_details.outputs.design_docs }}
