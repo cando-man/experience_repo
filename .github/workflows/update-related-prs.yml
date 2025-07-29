@@ -6,7 +6,8 @@ on:
     branches:
       # 設計書リンクを共有したいPRのベースブランチを指定します。
       # 例: 'main', 'develop', 'release/*' など、運用に合わせて追加・変更してください。
-      - release/*
+      - main
+      - develop
 
 jobs:
   update-design-docs:
@@ -18,14 +19,73 @@ jobs:
       pull-requests: write # PRの更新に必要なパーミッション
 
     steps:
+      - name: Debug Event Object
+        uses: actions/github-script@v7
+        with:
+          script: |
+            console.log('Event name:', github.event_name);
+            console.log('Event action:', github.event.action);
+            console.log('Full event object:', JSON.stringify(github.event, null, 2));
+            
+            // pull_requestオブジェクトの存在確認
+            if (github.event.pull_request) {
+              console.log('Pull request object exists');
+              console.log('PR number:', github.event.pull_request.number);
+              console.log('PR merged:', github.event.pull_request.merged);
+            } else {
+              console.log('Pull request object is undefined');
+              console.log('Available keys in event:', Object.keys(github.event));
+            }
+
       - name: Get Merged PR Details
         id: get_pr_details
         uses: actions/github-script@v7
         with:
           script: |
-            const pr = github.event.pull_request;
+            // 複数の方法でPRオブジェクトを取得
+            let pr = null;
+            
+            // 方法1: github.event.pull_request
+            if (github.event.pull_request) {
+              pr = github.event.pull_request;
+              console.log('Using github.event.pull_request');
+            }
+            // 方法2: context.payload.pull_request
+            else if (context.payload.pull_request) {
+              pr = context.payload.pull_request;
+              console.log('Using context.payload.pull_request');
+            }
+            // 方法3: APIを使用してPRを取得
+            else {
+              console.log('PR object not found in event, trying to get from API');
+              try {
+                const prNumber = context.issue.number;
+                const { data: prData } = await github.rest.pulls.get({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: prNumber,
+                });
+                pr = prData;
+                console.log('Retrieved PR from API');
+              } catch (error) {
+                console.error('Failed to get PR from API:', error);
+                core.setFailed('Could not retrieve pull request information');
+                return;
+              }
+            }
+            
+            if (!pr) {
+              console.error('Pull request object not found');
+              core.setFailed('Pull request object is undefined');
+              return;
+            }
+            
             const prBody = pr.body || ''; // マージされたPRの説明文を取得
             const baseBranch = pr.base.ref; // マージされたPRのベースブランチを取得
+            
+            console.log('PR Number:', pr.number);
+            console.log('PR Body:', prBody);
+            console.log('Base Branch:', baseBranch);
             
             // 設計書一覧セクションを正規表現で抽出
             // `# 設計書一覧` の後から、次の `#` 見出しまたはPRの終わりまでを対象とします。
