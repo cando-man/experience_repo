@@ -80,12 +80,10 @@ jobs:
                 
                 const prBody = pr.body || '';
                 const baseBranch = pr.base.ref;
-                const headBranch = pr.head.ref;
                 
                 console.log('PR Number:', pr.number);
                 console.log('PR Body Length:', prBody.length);
                 console.log('Base Branch:', baseBranch);
-                console.log('Head Branch:', headBranch);
                 console.log('PR Merged:', pr.merged);
                 
                 // マージされていない場合は処理をスキップ
@@ -93,7 +91,6 @@ jobs:
                   console.log('PR is not merged. Skipping processing.');
                   core.setOutput('design_docs', JSON.stringify([]));
                   core.setOutput('base_branch', baseBranch);
-                  core.setOutput('head_branch', headBranch);
                   core.setOutput('merged_pr_number', pr.number.toString());
                   return;
                 }
@@ -191,7 +188,6 @@ jobs:
                 console.log('Base Branch of Merged PR:', baseBranch);
                 core.setOutput('design_docs', JSON.stringify(designDocs));
                 core.setOutput('base_branch', baseBranch);
-                core.setOutput('head_branch', headBranch);
                 core.setOutput('merged_pr_number', pr.number.toString());
                 
               } catch (error) {
@@ -214,29 +210,27 @@ jobs:
                 
                 const baseBranch = core.getInput('base_branch') || process.env.base_branch;
                 const mergedPrNumber = core.getInput('merged_pr_number') || process.env.merged_pr_number;
-                const headBranch = core.getInput('head_branch') || process.env.head_branch;
                 
                 console.log('Base Branch:', baseBranch);
-                console.log('Head Branch:', headBranch);
                 console.log('Merged PR Number:', mergedPrNumber);
                 
-                if (!headBranch) {
-                  console.error('Head branch not provided');
-                  core.setFailed('Head branch is required');
+                if (!baseBranch) {
+                  console.error('Base branch not provided');
+                  core.setFailed('Base branch is required');
                   return;
                 }
                 
-                // マージされたPRのヘッドブランチに向けられたオープンなPRを取得
+                // マージされたPRのベースブランチがヘッドブランチとなっているオープンなPRを取得
                 const { data: openPRs } = await github.rest.pulls.list({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   state: 'open',
-                  head: `${context.repo.owner}:${headBranch}`,
+                  head: `${context.repo.owner}:${baseBranch}`,
                   sort: 'created',
                   direction: 'desc'
                 });
                 
-                console.log('Found open PRs targeting head branch:', openPRs.length);
+                console.log('Found open PRs with head branch:', openPRs.length);
                 
                 // マージされたPRを除外
                 const targetPRs = openPRs.filter(pr => pr.number != mergedPrNumber);
@@ -259,7 +253,6 @@ jobs:
             await findOpenPRs();
         env:
           base_branch: ${{ steps.get_pr_details.outputs.base_branch }}
-          head_branch: ${{ steps.get_pr_details.outputs.head_branch }}
           merged_pr_number: ${{ steps.get_pr_details.outputs.merged_pr_number }}
 
       - name: Update Target PR Descriptions
