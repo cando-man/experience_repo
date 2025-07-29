@@ -117,6 +117,8 @@ jobs:
               
               console.log('docSectionMatch:', docSectionMatch);
               
+              let designDocs = [];
+              
               if (docSectionMatch) {
                 console.log('Found design doc section:', docSectionMatch[1]);
                 
@@ -166,8 +168,13 @@ jobs:
                 console.log('Alternative pattern 1 result:', altMatch1);
                 
                 if (altMatch1) {
-                  console.log('Using alternative pattern 1 result');
-                  docSectionMatch = altMatch1;
+                  console.log('Using alternative pattern result');
+                  // 代替パターンで見つかった場合のリンク抽出
+                  const links = altMatch1[0].match(/\*\s*\[.*?\]\(https:\/\/docs\.google\.com\/spreadsheets\/d\/.*?\)/g);
+                  if (links) {
+                    designDocs = links.map(link => link.trim());
+                    console.log('Found links from alternative pattern:', designDocs);
+                  }
                 } else {
                   // パターン2: 行単位での検索
                   const lines = prBody.split('\n');
@@ -180,23 +187,6 @@ jobs:
                   const designDocLines = lines.filter(line => line.includes('設計書一覧'));
                   console.log('Lines containing "設計書一覧":', designDocLines);
                 }
-              }
-              
-              let designDocs = [];
-              if (docSectionMatch && docSectionMatch[1]) {
-                  // Googleスプレッドシートのリンク（`* [タイトル](https://docs.google.com/spreadsheets/d/...)` 形式）を抽出
-                  const links = docSectionMatch[1].match(/\*\s*\[.*?\]\(https:\/\/docs\.google\.com\/spreadsheets\/d\/.*?\)/g);
-                  if (links) {
-                      designDocs = links.map(link => link.trim());
-                  }
-              } else if (docSectionMatch && docSectionMatch[0]) {
-                  // 代替パターンで見つかった場合（docSectionMatch[0]に全体の内容が入っている）
-                  console.log('Extracting links from alternative pattern result');
-                  const links = docSectionMatch[0].match(/\*\s*\[.*?\]\(https:\/\/docs\.google\.com\/spreadsheets\/d\/.*?\)/g);
-                  if (links) {
-                      designDocs = links.map(link => link.trim());
-                      console.log('Found links from alternative pattern:', designDocs);
-                  }
               }
               
               console.log('Extracted Design Docs:', designDocs);
@@ -253,42 +243,6 @@ jobs:
               console.log(`- PR #${pr.number}: ${pr.title} (base: ${pr.base.ref}, head: ${pr.head.ref})`);
             });
             
-            // デバッグ: PR #12の詳細を確認
-            console.log('=== DEBUG: Checking PR #12 ===');
-            try {
-              const { data: pr12 } = await github.rest.pulls.get({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                pull_number: 12,
-              });
-              console.log(`PR #12 details:`);
-              console.log(`- Title: ${pr12.title}`);
-              console.log(`- State: ${pr12.state}`);
-              console.log(`- Base: ${pr12.base.ref}`);
-              console.log(`- Head: ${pr12.head.ref}`);
-              console.log(`- Merged: ${pr12.merged}`);
-              console.log(`- Closed at: ${pr12.closed_at}`);
-            } catch (error) {
-              console.log(`PR #12 not found or error: ${error.message}`);
-            }
-            
-            // デバッグ: すべてのPRの状況を確認
-            console.log('=== DEBUG: All PRs in repository ===');
-            try {
-              const { data: allPulls } = await github.rest.pulls.list({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                state: 'all', // すべてのPR（オープン・クローズ）
-                per_page: 100
-              });
-              console.log('All PRs in repository:');
-              allPulls.forEach(pr => {
-                console.log(`- PR #${pr.number}: ${pr.title} (state: ${pr.state}, base: ${pr.base.ref}, head: ${pr.head.ref}, merged: ${pr.merged})`);
-              });
-            } catch (error) {
-              console.log(`Error fetching all PRs: ${error.message}`);
-            }
-            
             // マージされたPR自身も含めて、すべてのオープンなPRを更新対象とする
             const targetPrNumbers = targetPulls.map(pr => pr.number);
             
@@ -333,7 +287,7 @@ jobs:
                 let existingDesignDocs = [];
 
                 // 対象PRに既に「集約設計書一覧」セクションがあるかチェック
-                const targetDocSectionMatch = newTargetPrBody.match(/#\s*集約設計書一覧\n([\s\S]*?)(?=\n#|\n---|$)/);
+                const targetDocSectionMatch = newTargetPrBody.match(/#\s*集約設計書一覧\r?\n([\s\S]*?)(?=\r?\n#|\r?\n---|$)/);
                 if (targetDocSectionMatch && targetDocSectionMatch[1]) {
                   const links = targetDocSectionMatch[1].match(/\*\s*\[.*?\]\(https:\/\/docs\.google\.com\/spreadsheets\/d\/.*?\)/g);
                   if (links) {
