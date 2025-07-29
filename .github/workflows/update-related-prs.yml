@@ -11,6 +11,7 @@ on:
       - develop/*
       - release/*
       - hotfix/*
+  workflow_dispatch: # 手動実行用（デバッグ後に削除可能）
 
 jobs:
   update-design-docs:
@@ -22,6 +23,25 @@ jobs:
       pull-requests: write # PRの更新に必要なパーミッション
 
     steps:
+      - name: Debug Environment Variables
+        run: |
+          echo "=== ENVIRONMENT VARIABLES ==="
+          echo "GITHUB_EVENT_NAME: $GITHUB_EVENT_NAME"
+          echo "GITHUB_EVENT_PATH: $GITHUB_EVENT_PATH"
+          echo "GITHUB_REF: $GITHUB_REF"
+          echo "GITHUB_HEAD_REF: $GITHUB_HEAD_REF"
+          echo "GITHUB_BASE_REF: $GITHUB_BASE_REF"
+          echo "GITHUB_ACTOR: $GITHUB_ACTOR"
+          echo "GITHUB_REPOSITORY: $GITHUB_REPOSITORY"
+          echo "GITHUB_SHA: $GITHUB_SHA"
+          
+          if [ -f "$GITHUB_EVENT_PATH" ]; then
+            echo "=== EVENT PAYLOAD ==="
+            cat "$GITHUB_EVENT_PATH"
+          else
+            echo "Event file not found at $GITHUB_EVENT_PATH"
+          fi
+
       - name: Debug Event Object
         uses: actions/github-script@v7
         with:
@@ -33,9 +53,10 @@ jobs:
               
               if (typeof github !== 'undefined') {
                 console.log('github.event_name:', github.event_name || 'undefined');
-                console.log('github.event.action:', github.event.action || 'undefined');
                 
-                if (typeof github.event !== 'undefined') {
+                // github.eventが存在する場合のみアクセス
+                if (typeof github.event !== 'undefined' && github.event !== null) {
+                  console.log('github.event.action:', github.event.action || 'undefined');
                   console.log('github.event keys:', Object.keys(github.event));
                   console.log('Full event object:', JSON.stringify(github.event, null, 2));
                   
@@ -48,7 +69,7 @@ jobs:
                     console.log('Pull request object is undefined');
                   }
                 } else {
-                  console.log('github.event is undefined');
+                  console.log('github.event is undefined or null');
                 }
               } else {
                 console.log('github object is undefined');
@@ -67,6 +88,25 @@ jobs:
               console.error('Error in debug step:', error);
               console.error('Error stack:', error.stack);
             }
+
+      - name: Debug Event File
+        run: |
+          echo "=== EVENT FILE DEBUG ==="
+          echo "Current directory: $(pwd)"
+          echo "Files in current directory:"
+          ls -la
+          
+          if [ -n "$GITHUB_EVENT_PATH" ]; then
+            echo "GITHUB_EVENT_PATH: $GITHUB_EVENT_PATH"
+            if [ -f "$GITHUB_EVENT_PATH" ]; then
+              echo "Event file exists and contains:"
+              cat "$GITHUB_EVENT_PATH"
+            else
+              echo "Event file does not exist"
+            fi
+          else
+            echo "GITHUB_EVENT_PATH is not set"
+          fi
 
       - name: Get Merged PR Details
         id: get_pr_details
