@@ -1,10 +1,10 @@
 # GitHub ActionsによるPR設計書リンク自動集約
 
-このドキュメントは、GitHub Actionsを使用して、マージされたプルリクエスト（PR）の設計書リンクを、**マージされたPRのヘッドブランチに向けられた他のオープンなPR**のDescriptionに自動的に集約する方法を説明します。
+このドキュメントは、GitHub Actionsを使用して、マージされたプルリクエスト（PR）の設計書リンクを、**マージされたPRのベースブランチが他のPRのヘッドブランチとなっているオープンなPR**のDescriptionに自動的に集約する方法を説明します。
 
 ## 1. 目的
 
-特定のブランチ（例: main や develop）にPRがマージされた際、そのPRのDescriptionに記載された設計書のスプレッドシートリンクを自動的に抽出し、**マージされたPRのヘッドブランチに向けられた現在オープンなすべてのPR**のDescriptionに追記します。これにより、関連するPRに常に最新の設計書情報が集約され、参照漏れを防ぎます。
+特定のブランチ（例: main や develop）にPRがマージされた際、そのPRのDescriptionに記載された設計書のスプレッドシートリンクを自動的に抽出し、**マージされたPRのベースブランチが他のPRのヘッドブランチとなっている現在オープンなすべてのPR**のDescriptionに追記します。これにより、関連するPRに常に最新の設計書情報が集約され、参照漏れを防ぎます。
 
 ## 2. 実装方法の概要
 
@@ -12,7 +12,7 @@ GitHub Actionsのワークフローを定義し、以下の流れで処理を実
 
 1. **PRマージイベントの検知**: 特定のベースブランチへのPRがマージされたことをトリガーとします。
 2. **設計書リンクの抽出**: マージされたPRのDescriptionから、特定のフォーマットで記載された設計書リンクを抽出します。
-3. **関連PRの特定**: **マージされたPRのヘッドブランチに向けられた、現在オープンなすべてのPR**をリストアップします。
+3. **関連PRの特定**: **マージされたPRのベースブランチが他のPRのヘッドブランチとなっている、現在オープンなすべてのPR**をリストアップします。
 4. **Descriptionの更新**: リストアップされた各PRのDescriptionに、抽出した設計書リンクを追記します。
 
 ## 3. 前提条件と準備
@@ -132,12 +132,10 @@ jobs:
                 
                 const prBody = pr.body || '';
                 const baseBranch = pr.base.ref;
-                const headBranch = pr.head.ref;
                 
                 console.log('PR Number:', pr.number);
                 console.log('PR Body Length:', prBody.length);
                 console.log('Base Branch:', baseBranch);
-                console.log('Head Branch:', headBranch);
                 console.log('PR Merged:', pr.merged);
                 
                 // マージされていない場合は処理をスキップ
@@ -145,7 +143,6 @@ jobs:
                   console.log('PR is not merged. Skipping processing.');
                   core.setOutput('design_docs', JSON.stringify([]));
                   core.setOutput('base_branch', baseBranch);
-                  core.setOutput('head_branch', headBranch);
                   core.setOutput('merged_pr_number', pr.number.toString());
                   return;
                 }
@@ -243,7 +240,6 @@ jobs:
                 console.log('Base Branch of Merged PR:', baseBranch);
                 core.setOutput('design_docs', JSON.stringify(designDocs));
                 core.setOutput('base_branch', baseBranch);
-                core.setOutput('head_branch', headBranch);
                 core.setOutput('merged_pr_number', pr.number.toString());
                 
               } catch (error) {
@@ -266,29 +262,27 @@ jobs:
                 
                 const baseBranch = core.getInput('base_branch') || process.env.base_branch;
                 const mergedPrNumber = core.getInput('merged_pr_number') || process.env.merged_pr_number;
-                const headBranch = core.getInput('head_branch') || process.env.head_branch;
                 
                 console.log('Base Branch:', baseBranch);
-                console.log('Head Branch:', headBranch);
                 console.log('Merged PR Number:', mergedPrNumber);
                 
-                if (!headBranch) {
-                  console.error('Head branch not provided');
-                  core.setFailed('Head branch is required');
+                if (!baseBranch) {
+                  console.error('Base branch not provided');
+                  core.setFailed('Base branch is required');
                   return;
                 }
                 
-                // マージされたPRのヘッドブランチに向けられたオープンなPRを取得
+                // マージされたPRのベースブランチが他のPRのヘッドブランチとなっているオープンなPRを取得
                 const { data: openPRs } = await github.rest.pulls.list({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   state: 'open',
-                  head: `${context.repo.owner}:${headBranch}`,
+                  head: `${context.repo.owner}:${baseBranch}`,
                   sort: 'created',
                   direction: 'desc'
                 });
                 
-                console.log('Found open PRs targeting head branch:', openPRs.length);
+                console.log('Found open PRs with head branch:', openPRs.length);
                 
                 // マージされたPRを除外
                 const targetPRs = openPRs.filter(pr => pr.number != mergedPrNumber);
@@ -311,7 +305,6 @@ jobs:
             await findOpenPRs();
         env:
           base_branch: ${{ steps.get_pr_details.outputs.base_branch }}
-          head_branch: ${{ steps.get_pr_details.outputs.head_branch }}
           merged_pr_number: ${{ steps.get_pr_details.outputs.merged_pr_number }}
 
       - name: Update Target PR Descriptions
@@ -413,10 +406,10 @@ jobs:
 #### Step 1: Get Merged PR Details
 - マージされたPRの情報を取得
 - PRのDescriptionから設計書リンクを抽出
-- ベースブランチとヘッドブランチの情報を取得
+- ベースブランチの情報を取得
 
 #### Step 2: Find All Open PRs
-- **マージされたPRのヘッドブランチに向けられたオープンなPR**を検索
+- **マージされたPRのベースブランチが他のPRのヘッドブランチとなっているオープンなPR**を検索
 - マージされたPR自体は除外
 - 対象となるPRの番号リストを出力
 
@@ -429,8 +422,21 @@ jobs:
 
 ### 5.1. テスト手順
 
+#### 例：ブランチ構造での動作
+
+```
+main
+├── develop/test (PR#1: develop/test → main)
+│   └── feature/test (PR#2: feature/test → develop/test)
+```
+
+1. **PR#2をマージ**: `feature/test` → `develop/test`
+2. **PR#1が更新される**: PR#2のベースブランチ（`develop/test`）がPR#1のヘッドブランチとなっているため
+
+#### テスト手順
+
 1. **テスト用PRの作成**: 設計書リンクを含むPRを作成
-2. **関連PRの作成**: 同じヘッドブランチに向けられた別のPRを作成
+2. **関連PRの作成**: マージされたPRのベースブランチがヘッドブランチとなっている別のPRを作成
 3. **PRのマージ**: 最初のPRをマージ
 4. **動作確認**: 2番目のPRのDescriptionが自動更新されることを確認
 
@@ -444,8 +450,8 @@ jobs:
 ### 5.3. よくある問題と解決方法
 
 #### 関連PRが見つからない場合
-- 対象PRが**マージされたPRのヘッドブランチに向けられている**か確認
-- ベースブランチではなく、ヘッドブランチが重要
+- 対象PRが**マージされたPRのベースブランチをヘッドブランチとしている**か確認
+- 例：PR#2（`feature/test` → `develop/test`）がマージされた場合、PR#1（`develop/test` → `main`）が更新される
 
 #### 設計書リンクが抽出されない場合
 - PRのDescriptionに`## 設計書一覧`セクションがあるか確認
@@ -459,7 +465,7 @@ jobs:
 
 ### 6.1. 検索ロジック
 
-- **対象**: マージされたPRのヘッドブランチに向けられたオープンなPR
+- **対象**: マージされたPRのベースブランチが他のPRのヘッドブランチとなっているオープンなPR
 - **除外**: マージされたPR自体
 - **重複防止**: 既に`## 関連設計書`セクションがあるPRはスキップ
 
