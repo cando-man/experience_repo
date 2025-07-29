@@ -11,103 +11,16 @@ on:
       - develop/*
       - release/*
       - hotfix/*
-  workflow_dispatch: # 手動実行用（デバッグ後に削除可能）
 
 jobs:
   update-design-docs:
-    # 一時的に条件を緩和してデバッグ
-    # if: github.event.pull_request.merged == true
+    # 条件チェックはスクリプト内で行う
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: write # PRの更新に必要なパーミッション
 
     steps:
-      - name: Debug Environment Variables
-        run: |
-          echo "=== ENVIRONMENT VARIABLES ==="
-          echo "GITHUB_EVENT_NAME: $GITHUB_EVENT_NAME"
-          echo "GITHUB_EVENT_PATH: $GITHUB_EVENT_PATH"
-          echo "GITHUB_REF: $GITHUB_REF"
-          echo "GITHUB_HEAD_REF: $GITHUB_HEAD_REF"
-          echo "GITHUB_BASE_REF: $GITHUB_BASE_REF"
-          echo "GITHUB_ACTOR: $GITHUB_ACTOR"
-          echo "GITHUB_REPOSITORY: $GITHUB_REPOSITORY"
-          echo "GITHUB_SHA: $GITHUB_SHA"
-          
-          if [ -f "$GITHUB_EVENT_PATH" ]; then
-            echo "=== EVENT PAYLOAD ==="
-            cat "$GITHUB_EVENT_PATH"
-          else
-            echo "Event file not found at $GITHUB_EVENT_PATH"
-          fi
-
-      - name: Debug Event Object
-        uses: actions/github-script@v7
-        with:
-          script: |
-            try {
-              console.log('=== DEBUG INFORMATION ===');
-              console.log('github object exists:', typeof github !== 'undefined');
-              console.log('github.event exists:', typeof github.event !== 'undefined');
-              
-              if (typeof github !== 'undefined') {
-                console.log('github.event_name:', github.event_name || 'undefined');
-                
-                // github.eventが存在する場合のみアクセス
-                if (typeof github.event !== 'undefined' && github.event !== null) {
-                  console.log('github.event.action:', github.event.action || 'undefined');
-                  console.log('github.event keys:', Object.keys(github.event));
-                  console.log('Full event object:', JSON.stringify(github.event, null, 2));
-                  
-                  // pull_requestオブジェクトの存在確認
-                  if (github.event.pull_request) {
-                    console.log('Pull request object exists');
-                    console.log('PR number:', github.event.pull_request.number);
-                    console.log('PR merged:', github.event.pull_request.merged);
-                  } else {
-                    console.log('Pull request object is undefined');
-                  }
-                } else {
-                  console.log('github.event is undefined or null');
-                }
-              } else {
-                console.log('github object is undefined');
-              }
-              
-              // contextオブジェクトの確認
-              console.log('context object exists:', typeof context !== 'undefined');
-              if (typeof context !== 'undefined') {
-                console.log('context.payload exists:', typeof context.payload !== 'undefined');
-                if (typeof context.payload !== 'undefined') {
-                  console.log('context.payload keys:', Object.keys(context.payload));
-                }
-              }
-              
-            } catch (error) {
-              console.error('Error in debug step:', error);
-              console.error('Error stack:', error.stack);
-            }
-
-      - name: Debug Event File
-        run: |
-          echo "=== EVENT FILE DEBUG ==="
-          echo "Current directory: $(pwd)"
-          echo "Files in current directory:"
-          ls -la
-          
-          if [ -n "$GITHUB_EVENT_PATH" ]; then
-            echo "GITHUB_EVENT_PATH: $GITHUB_EVENT_PATH"
-            if [ -f "$GITHUB_EVENT_PATH" ]; then
-              echo "Event file exists and contains:"
-              cat "$GITHUB_EVENT_PATH"
-            else
-              echo "Event file does not exist"
-            fi
-          else
-            echo "GITHUB_EVENT_PATH is not set"
-          fi
-
       - name: Get Merged PR Details
         id: get_pr_details
         uses: actions/github-script@v7
@@ -116,25 +29,25 @@ jobs:
             try {
               console.log('=== GETTING PR DETAILS ===');
               
-              // githubオブジェクトの存在確認
-              if (typeof github === 'undefined') {
-                console.error('github object is undefined');
-                core.setFailed('github object is not available');
+              // contextオブジェクトの存在確認
+              if (typeof context === 'undefined') {
+                console.error('context object is undefined');
+                core.setFailed('context object is not available');
                 return;
               }
               
               // 複数の方法でPRオブジェクトを取得
               let pr = null;
               
-              // 方法1: github.event.pull_request
-              if (github.event && github.event.pull_request) {
-                pr = github.event.pull_request;
-                console.log('Using github.event.pull_request');
-              }
-              // 方法2: context.payload.pull_request
-              else if (context && context.payload && context.payload.pull_request) {
+              // 方法1: context.payload.pull_request (推奨)
+              if (context.payload && context.payload.pull_request) {
                 pr = context.payload.pull_request;
                 console.log('Using context.payload.pull_request');
+              }
+              // 方法2: github.event.pull_request (フォールバック)
+              else if (github.event && github.event.pull_request) {
+                pr = github.event.pull_request;
+                console.log('Using github.event.pull_request');
               }
               // 方法3: APIを使用してPRを取得
               else {
@@ -167,6 +80,16 @@ jobs:
               console.log('PR Number:', pr.number);
               console.log('PR Body:', prBody);
               console.log('Base Branch:', baseBranch);
+              console.log('PR Merged:', pr.merged);
+              
+              // マージされていない場合は処理をスキップ
+              if (!pr.merged) {
+                console.log('PR is not merged. Skipping processing.');
+                core.setOutput('design_docs', JSON.stringify([]));
+                core.setOutput('base_branch', baseBranch);
+                core.setOutput('merged_pr_number', pr.number);
+                return;
+              }
               
               // 設計書一覧セクションを正規表現で抽出
               // `# 設計書一覧` の後から、次の `#` 見出しまたはPRの終わりまでを対象とします。
