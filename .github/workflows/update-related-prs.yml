@@ -170,8 +170,9 @@ jobs:
             const mergedPrNumber = parseInt(process.env.merged_pr_number);
 
             console.log('=== FINDING OPEN PRS DEBUG ===');
-            console.log('Base branch:', baseBranch);
+            console.log('Base branch (merged PR):', baseBranch);
             console.log('Merged PR number:', mergedPrNumber);
+            console.log('Looking for PRs that use this branch as head branch');
 
             if (!baseBranch) {
               console.log('Base branch not found. Skipping finding open PRs.');
@@ -179,15 +180,17 @@ jobs:
               return;
             }
 
-            // マージされたPRと同じベースブランチをターゲットとする、オープンなすべてのPRを取得
-            console.log('Fetching open PRs for base branch:', baseBranch);
+            // develop/testをヘッドブランチとして使用しているオープンなPRを取得
+            console.log('Fetching open PRs that use develop/test as head branch');
             const { data: pulls } = await github.rest.pulls.list({
               owner: context.repo.owner,
               repo: context.repo.repo,
               state: 'open', // オープンなPRのみ
-              base: baseBranch, // マージされたPRと同じベースブランチ
               per_page: 100 // 一度に取得するPRの最大数（必要に応じて調整）
             });
+            
+            // develop/testをヘッドブランチとして使用しているPRをフィルタリング
+            const targetPulls = pulls.filter(pr => pr.head.ref === baseBranch);
             
             console.log('Total open PRs found:', pulls.length);
             console.log('All open PRs:');
@@ -195,12 +198,53 @@ jobs:
               console.log(`- PR #${pr.number}: ${pr.title} (base: ${pr.base.ref}, head: ${pr.head.ref})`);
             });
             
+            console.log(`PRs using ${baseBranch} as head branch:`, targetPulls.length);
+            targetPulls.forEach(pr => {
+              console.log(`- PR #${pr.number}: ${pr.title} (base: ${pr.base.ref}, head: ${pr.head.ref})`);
+            });
+            
+            // デバッグ: PR #12の詳細を確認
+            console.log('=== DEBUG: Checking PR #12 ===');
+            try {
+              const { data: pr12 } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: 12,
+              });
+              console.log(`PR #12 details:`);
+              console.log(`- Title: ${pr12.title}`);
+              console.log(`- State: ${pr12.state}`);
+              console.log(`- Base: ${pr12.base.ref}`);
+              console.log(`- Head: ${pr12.head.ref}`);
+              console.log(`- Merged: ${pr12.merged}`);
+              console.log(`- Closed at: ${pr12.closed_at}`);
+            } catch (error) {
+              console.log(`PR #12 not found or error: ${error.message}`);
+            }
+            
+            // デバッグ: すべてのPRの状況を確認
+            console.log('=== DEBUG: All PRs in repository ===');
+            try {
+              const { data: allPulls } = await github.rest.pulls.list({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'all', // すべてのPR（オープン・クローズ）
+                per_page: 100
+              });
+              console.log('All PRs in repository:');
+              allPulls.forEach(pr => {
+                console.log(`- PR #${pr.number}: ${pr.title} (state: ${pr.state}, base: ${pr.base.ref}, head: ${pr.head.ref}, merged: ${pr.merged})`);
+              });
+            } catch (error) {
+              console.log(`Error fetching all PRs: ${error.message}`);
+            }
+            
             // マージされたPR自身も含めて、すべてのオープンなPRを更新対象とする
-            const targetPrNumbers = pulls.map(pr => pr.number);
+            const targetPrNumbers = targetPulls.map(pr => pr.number);
             
             console.log('PRs to update (including merged PR):');
             targetPrNumbers.forEach(prNumber => {
-              const pr = pulls.find(p => p.number === prNumber);
+              const pr = targetPulls.find(p => p.number === prNumber);
               const isMerged = prNumber === mergedPrNumber;
               console.log(`- PR #${prNumber}: ${pr.title} ${isMerged ? '(MERGED)' : ''}`);
             });
@@ -271,9 +315,4 @@ jobs:
                 });
                 console.log(`Updated PR #${prNumber} with new design docs.`);
               } catch (error) {
-                console.error(`Failed to update PR #${prNumber}: ${error.message}`);
-              }
-            }
-        env:
-          target_pr_numbers: ${{ steps.find_all_open_prs.outputs.target_pr_numbers }}
-          design_docs: ${{ steps.get_pr_details.outputs.design_docs }} 
+                console.error(`
